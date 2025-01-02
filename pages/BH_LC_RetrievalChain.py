@@ -2,6 +2,8 @@ import streamlit as st
 from langchain_openai import ChatOpenAI
 from openai import OpenAIError
 from langchain_community.callbacks import get_openai_callback
+from bs4 import BeautifulSoup
+import requests
 
 
 def modelName():

@@ -5,3 +5,5 @@ langchain-community
 numpy
 pandas
 pillow
+bs4
+requests

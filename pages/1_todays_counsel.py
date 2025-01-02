@@ -33,6 +33,10 @@ def generate_text(api_key, birth_date, gender, language):
             # Use the callback to track token usage
             with get_openai_callback() as cb:
                 generated_text = llm.invoke(query)
+                # Display only the content of the generated text
+                st.write("Generated counsel:")
+                st.write(generated_text.content)
+
                 # Display token usage statistics
                 st.write("Token Usage Statistics:")
                 st.write(f"- Total Tokens: {cb.total_tokens}")
@@ -79,5 +83,3 @@ if st.button("Create a counsel."):
         birth_date_str = birth_date.strftime("%Y-%m-%d")
         # Generate the counsel
         generated_text = generate_text(api_key, birth_date_str, gender, language)
-        st.write("Generated counsel:")
-        st.write(generated_text)

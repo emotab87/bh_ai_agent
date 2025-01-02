@@ -23,6 +23,9 @@ def createChain(llm, output_parser):
 
     return chain
 
+def modelName():
+    """Return the model name to use"""
+    return "gpt-3.5-turbo"
 
 # Function to interact with OpenAI API
 def generate_text(api_key, input_text, whatToAsk, language):

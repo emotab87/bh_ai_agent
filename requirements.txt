@@ -50,6 +50,8 @@ dataclasses-json==0.6.7
     # via langchain-community
 distro==1.9.0
     # via openai
+faiss-cpu==1.9.0.post1
+    # via -r requirements.in
 frozenlist==1.5.0
     # via
     #   aiohttp
@@ -128,6 +130,7 @@ narwhals==1.20.1
 numpy==1.26.4
     # via
     #   -r requirements.in
+    #   faiss-cpu
     #   langchain
     #   langchain-community
     #   pandas
@@ -142,6 +145,7 @@ orjson==3.10.13
 packaging==24.2
     # via
     #   altair
+    #   faiss-cpu
     #   langchain-core
     #   marshmallow
     #   streamlit

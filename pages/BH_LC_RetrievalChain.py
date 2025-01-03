@@ -1,9 +1,15 @@
 import streamlit as st
-from langchain_openai import ChatOpenAI
-from openai import OpenAIError
+from langchain_community.chat_models import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from langchain import hub
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.callbacks import get_openai_callback
-from bs4 import BeautifulSoup
-import requests
+from openai import OpenAIError
 
 
 def modelName():
@@ -21,140 +27,153 @@ def modelName_embedding_small():
     return "text-embedding-ada-002"
 
 
-# Function to interact with OpenAI API
-def generate_text(api_key, language, question, select_model):
+def load_and_process_documents(url):
+    """Load and process documents from a URL."""
     try:
-        openai_api_key = api_key
-        embedding_model_name = modelName_embedding_small()
-        if select_model == "Cheapest":
-            model_name = modelName()
-        else:
-            model_name = modelName4o()
-
-        st.write("*** Work Process ***")
-
-        # 1. Get Data
-        from langchain_community.document_loaders import WebBaseLoader
-
-        loader = WebBaseLoader("https://docs.smith.langchain.com/user_guide")
+        loader = WebBaseLoader(url)
         docs = loader.load()
-        st.write("1. Get data from the Webpage.")
-
-        # 2. Set Embedding model
-        from langchain_openai import OpenAIEmbeddings
-
-        embeddings = OpenAIEmbeddings(
-            openai_api_key=openai_api_key, model=embedding_model_name
-        )
-        st.write("2. Set Embedding Model. (Model Name is " + embedding_model_name + ")")
-
-        # 3. Store vector into vector storage
-        from langchain_community.vectorstores import FAISS
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
-
         text_splitter = RecursiveCharacterTextSplitter()
-        documents = text_splitter.split_documents(docs)
-        vector = FAISS.from_documents(documents, embeddings)
-        st.write("3. Split text and store as vector using FAISS.")
+        return text_splitter.split_documents(docs)
+    except Exception as e:
+        st.error(f"Error loading documents: {str(e)}")
+        return None
 
-        # 4. create documents chain
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain.chains.combine_documents import create_stuff_documents_chain
 
-        prompt = ChatPromptTemplate.from_template(
-            """Answer the following question based only on the provided context in English and Translate the answer in """
-            + language
-            + """ :
+def setup_vector_store(documents, embeddings):
+    """Create and return a FAISS vector store."""
+    try:
+        return FAISS.from_documents(documents, embeddings)
+    except Exception as e:
+        st.error(f"Error setting up vector store: {str(e)}")
+        return None
 
-        <context>
-        {context}
-        </context>
 
-        Question: {input}"""
+def create_qa_chain(api_key, model_name):
+    """Create the QA chain with the specified model."""
+    try:
+        llm = ChatOpenAI(openai_api_key=api_key, model_name=model_name)
+        retrieval_qa_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+        return create_stuff_documents_chain(llm, retrieval_qa_prompt)
+    except Exception as e:
+        st.error(f"Error creating QA chain: {str(e)}")
+        return None
+
+
+def generate_text(api_key, language, question, select_model):
+    """Generate text response using the specified model and question."""
+    try:
+        # Model selection
+        model_name = modelName() if select_model == "Cheapest" else modelName4o()
+        st.info(f"Using model: {model_name}")
+
+        # Document processing
+        url = "https://docs.smith.langchain.com/user_guide"
+        documents = load_and_process_documents(url)
+        if not documents:
+            return None
+
+        # Setup embeddings and vector store
+        embeddings = OpenAIEmbeddings(
+            openai_api_key=api_key, model=modelName_embedding_small()
         )
+        vector_store = setup_vector_store(documents, embeddings)
+        if not vector_store:
+            return None
 
-        llm = ChatOpenAI(openai_api_key=openai_api_key, model_name=model_name)
-        document_chain = create_stuff_documents_chain(llm, prompt)
-        st.write(
-            "4. Create Document chain. -create_stuff_documents_chain(llm, prompt)-"
-        )
+        # Create retrieval chain
+        qa_chain = create_qa_chain(api_key, model_name)
+        if not qa_chain:
+            return None
 
-        # 5. Create Retrieval Chain
-        from langchain.chains import create_retrieval_chain
+        retrieval_chain = create_retrieval_chain(vector_store.as_retriever(), qa_chain)
 
-        retriever = vector.as_retriever()
-        retrieval_chain = create_retrieval_chain(retriever, document_chain)
-        st.write(
-            "5. Create Retrieval Chain. -create_retrieval_chain(retriever, document_chain)-"
-        )
-
+        # Generate response with callback
         with get_openai_callback() as cb:
-            generated_text = retrieval_chain.invoke({"input": question})
-            st.write(cb)
+            response = retrieval_chain.invoke(
+                {"input": f"{question} (Please respond in {language})"}
+            )
+            st.write("Token Usage Statistics:")
+            st.write(f"- Total Tokens: {cb.total_tokens}")
+            st.write(f"- Prompt Tokens: {cb.prompt_tokens}")
+            st.write(f"- Completion Tokens: {cb.completion_tokens}")
+            st.write(f"- Total Cost (USD): ${cb.total_cost:.4f}")
 
-        vector.delete([vector.index_to_docstore_id[0]])
-        # Is now missing
-        # 0 in vector.index_to_docstore_id
+        return response
 
-        return generated_text
     except OpenAIError as e:
-        st.warning("Incorrect API key provided or OpenAI API error.")
-        st.warning(e)
+        st.error(f"OpenAI API Error: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {str(e)}")
+        return None
+
+
+# Predefined questions
+questions = [
+    "How can langsmith help with testing?",
+    "Please summarize on Prototyping.",
+    "Please tell me about Beta Testing.",
+    "Please explain about Production.",
+    "Please summarize whole LangSmith User Guide.",
+]
+
+# Available languages
+available_languages = [
+    "Korean",
+    "Spanish",
+    "French",
+    "German",
+    "Chinese",
+    "Japanese",
+    "English",
+]
 
 
 def main():
     st.title("LangChain Quickstart 02 - Retrieval Chain")
 
-    # Get user input for OpenAI API key
-    api_key = st.text_input("Please input your OpenAI API Key:", type="password")
-    st.write(
-        "Fetching this Web Page Contents : https://docs.smith.langchain.com/user_guide"
-    )
+    # Configuration section
+    with st.sidebar:
+        st.header("Configuration")
+        api_key = st.text_input("OpenAI API Key:", type="password")
+        select_model = st.radio(
+            "Choose Model:",
+            ["Cheapest", "gpt-4o-2024-05-13"],
+            help="Select the model to use for generation",
+        )
 
-    select_model = st.radio(
-        "Please choose the Model you'd like to use.", ["Cheapest", "gpt-4o-2024-05-13"]
-    )
+    # Main content
+    st.write("Source: https://docs.smith.langchain.com/user_guide")
 
-    # List of Questions
-    questions = [
-        "How can langsmith help with testing?",
-        "Please summarize on Prototyping.",
-        "Please tell me about Beta Testing.",
-        "Please explain about Production.",
-        "Please summarize whole LangSmith User Guide.",
-    ]
+    col1, col2 = st.columns(2)
 
-    # User-selected question
-    selected_question = st.selectbox("Select a question:", questions)
+    with col1:
+        # Question selection
+        selected_question = st.selectbox(
+            "Select a question:", questions, help="Choose a predefined question"
+        )
 
-    st.write("*Answers will be in English and the language of your choice.* ")
+    with col2:
+        # Language selection
+        selected_language = st.selectbox(
+            "Select output language:",
+            available_languages,
+            help="Choose the language for the response",
+        )
 
-    # List of languages available for ChatGPT
-    available_languages = [
-        "Korean",
-        "Spanish",
-        "French",
-        "German",
-        "Chinese",
-        "Japanese",
-    ]
+    if st.button("Generate Response", type="primary"):
+        if not api_key:
+            st.warning("Please provide your OpenAI API key.")
+            return
 
-    # User-selected language
-    selected_language = st.selectbox("Select a language:", available_languages)
-
-    # Button to trigger text generation
-    if st.button("Submit."):
-        if api_key:
-            with st.spinner("Wait for it..."):
-                # When an API key is provided, display the generated text
-                generated_text = generate_text(
-                    api_key, selected_language, selected_question, select_model
-                )
-                st.write(generated_text)
-                st.write("**: Answer Only**")
-                st.write(generated_text["answer"])
-        else:
-            st.warning("Please insert your OpenAI API key.")
+        with st.spinner("Generating response..."):
+            response = generate_text(
+                api_key, selected_language, selected_question, select_model
+            )
+            if response:
+                st.success("Response generated successfully!")
+                st.subheader("Generated Response:")
+                st.write(response["answer"])
 
 
 if __name__ == "__main__":

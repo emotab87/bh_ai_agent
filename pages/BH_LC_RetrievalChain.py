@@ -48,12 +48,37 @@ def setup_vector_store(documents, embeddings):
         return None
 
 
-def create_qa_chain(api_key, model_name):
+def create_qa_chain(api_key, model_name, language):
     """Create the QA chain with the specified model."""
     try:
         llm = ChatOpenAI(openai_api_key=api_key, model_name=model_name)
-        retrieval_qa_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
-        return create_stuff_documents_chain(llm, retrieval_qa_prompt)
+
+        # Define the system message for the prompt
+        system_message = (
+            """You are an expert programmer and problem-solver, tasked with answering any question about Langchain. Answer all questions in """
+            + language
+            + """.
+            Generate a comprehensive and informative answer of 80 words or less for the given question based solely on the provided search results 
+            (URL and content). You must only use information from the provided search results. Use an unbiased and journalistic tone. 
+            Combine search results together into a coherent answer. Do not repeat text. Cite search results using [${{number}}] notation. 
+            Only cite the most relevant results that answer the question accurately. Place these citations at the end of the sentence or paragraph that reference them - do not put them all at the end. If different results refer to different entities within the same name, write separate answers for each entity.
+            You should use bullet points in your answer for readability. Put citations where they apply rather than putting them all at the end.
+            If there is nothing in the context relevant to the question at hand, just say "Hmm, I'm not sure." Don't try to make up an answer.
+            """
+        )
+
+        # Create the chat prompt template
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_message),
+                ("human", "Here is the context:\n\n{context}"),
+                ("human", "Question: {input}"),
+            ]
+        )
+
+        # Create and return the document chain
+        return create_stuff_documents_chain(llm, prompt)
+
     except Exception as e:
         st.error(f"Error creating QA chain: {str(e)}")
         return None
@@ -81,7 +106,7 @@ def generate_text(api_key, language, question, select_model):
             return None
 
         # Create retrieval chain
-        qa_chain = create_qa_chain(api_key, model_name)
+        qa_chain = create_qa_chain(api_key, model_name, language)
         if not qa_chain:
             return None
 

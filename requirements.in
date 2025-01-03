@@ -8,3 +8,4 @@ pillow
 bs4
 requests
 faiss-cpu
+langchain_teddynote

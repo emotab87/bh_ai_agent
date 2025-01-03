@@ -7,11 +7,14 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_teddynote.graphs import visualize_graph
 
+
 def claudeHaikuModelName():
     return "claude-3-5-sonnet-20240620"
 
+
 def modelName():
     return "gpt-4o-mini"
+
 
 def LangGraph_run():
     ###### STEP 1. 상태 (State) 정의 ######
@@ -24,24 +27,24 @@ def LangGraph_run():
     # session_state에 저장된 model_choice를 사용합니다.
     claudeModelName = claudeHaikuModelName()
     chatGPTModelName = modelName()
-    
+
     if st.session_state.model_choice == "Anthropic Claude":
         llm = ChatAnthropic(model=claudeModelName, api_key=st.session_state.api_key)
     elif st.session_state.model_choice == "OpenAI ChatGPT":
         # OpenAI ChatGPT를 사용하는 코드
         llm = ChatOpenAI(model=chatGPTModelName, api_key=st.session_state.api_key)
-    
+
     # Chatbot 함수 정의
     def chatbot(state: State):
         return {"messages": [llm.invoke(state["messages"])]}
-    
+
     ###### STEP 3. 그래프 (Graph) 정의, 노드 추가 ######
     # 그래프 생성
     graph_builder = StateGraph(State)
 
     # 노드 추가
     graph_builder.add_node("chatbot", chatbot)
-    
+
     ###### STEP 4. 그래프 Edge 추가 ######
     graph_builder.add_edge(START, "chatbot")
     graph_builder.add_edge("chatbot", END)
@@ -52,15 +55,10 @@ def LangGraph_run():
     ###### STEP 6. 그래프 시각화 ######
     # 그래프 시각화
     try:
-        # Get the mermaid PNG as bytes
-        graph_bytes = visualize_graph(graph)
-
-        # Convert the bytes to an image and display it in Streamlit
-        st.image(graph_bytes, caption="Chatbot Graph")
-
+        visualize_graph(graph)
+        st.write("Graph visualization completed")
     except Exception as e:
         st.error(f"Failed to display graph: {e}")
-
 
     if "messages_01" not in st.session_state:
         st.session_state.messages_01 = []

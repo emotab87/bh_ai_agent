@@ -5,7 +5,8 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langchain_teddynote.graphs import visualize_graph
+from langgraph.prebuilt.state_graph import CompiledStateGraph
+from langgraph.graph.nodes import NodeStyles
 
 
 def claudeHaikuModelName():
@@ -55,8 +56,11 @@ def LangGraph_run():
     ###### STEP 6. 그래프 시각화 ######
     # 그래프 시각화
     try:
-        visualize_graph(graph)
-        st.write("Graph visualization completed")
+        image_data = visualize_graph_streamlit(graph)
+        if image_data is not None:
+            st.image(image_data, caption="Chatbot Graph", use_column_width=True)
+        else:
+            st.warning("Failed to generate graph visualization")
     except Exception as e:
         st.error(f"Failed to display graph: {e}")
 
@@ -89,6 +93,23 @@ def LangGraph_run():
                 )
                 with st.chat_message("assistant"):
                     st.markdown(response)
+
+
+def visualize_graph_streamlit(graph, xray=False):
+    """
+    CompiledStateGraph 객체를 시각화하여 이미지 데이터를 반환합니다.
+    """
+    try:
+        if isinstance(graph, CompiledStateGraph):
+            image_data = graph.get_graph(xray=xray).draw_mermaid_png(
+                background_color="white",
+                node_colors=NodeStyles(),
+            )
+            return image_data
+        return None
+    except Exception as e:
+        print(f"[ERROR] Visualize Graph Error: {e}")
+        return None
 
 
 def main():

@@ -17,7 +17,9 @@ altair==5.5.0
 annotated-types==0.7.0
     # via pydantic
 anthropic==0.42.0
-    # via langchain-teddynote
+    # via
+    #   langchain-anthropic
+    #   langchain-teddynote
 anyio==4.7.0
     # via
     #   anthropic
@@ -56,6 +58,8 @@ dataclasses-json==0.6.7
     # via langchain-community
 deepl==1.20.0
     # via langchain-teddynote
+defusedxml==0.7.1
+    # via langchain-anthropic
 distro==1.9.0
     # via
     #   anthropic
@@ -125,11 +129,14 @@ langchain==0.3.14
     # via
     #   langchain-community
     #   langchain-teddynote
+langchain-anthropic==0.3.1
+    # via -r requirements.in
 langchain-community==0.3.14
     # via -r requirements.in
 langchain-core==0.3.29
     # via
     #   langchain
+    #   langchain-anthropic
     #   langchain-community
     #   langchain-openai
     #   langchain-text-splitters
@@ -147,7 +154,7 @@ langgraph-checkpoint==2.0.9
     # via langgraph
 langgraph-sdk==0.1.48
     # via langgraph
-langsmith==0.2.9
+langsmith==0.2.10
     # via
     #   langchain
     #   langchain-community
@@ -246,6 +253,7 @@ pydantic==2.10.4
     # via
     #   anthropic
     #   langchain
+    #   langchain-anthropic
     #   langchain-core
     #   langsmith
     #   openai

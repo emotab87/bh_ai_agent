@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 import base64
 import io
+from datetime import datetime
 
 
 def claudeHaikuModelName():
@@ -23,198 +24,138 @@ def modelName():
 def LangGraph_run():
     # First, validate the Tavily API key
     try:
-        # 검색 도구 생성 with Tavily API key
         tool = TavilySearch(api_key=st.session_state.tavily_api_key, max_results=3)
-        # Test the API key with a simple search
         tool.invoke("test")
     except Exception as e:
         st.error("Invalid Tavily API key. Please check your API key and try again.")
         st.error(f"Error: {str(e)}")
         return
 
-    ###### STEP 1. 상태 (State) 정의 ######
-    class State(TypedDict):
-        # 메시지 정의(list type이며 add_messages 함수를 사용하여 메시지를 추가)
-        messages: Annotated[list, add_messages]
+    # Create tabs for different views
+    chat_tab, graph_tab, debug_tab = st.tabs(["💬 Chat", "📊 Graph", "🔍 Debug"])
 
-    ###### STEP 2. 노드(Node) 정의 ######
-    # LLM 정의
-    # session_state에 저장된 model_choice를 사용합니다.
-    claudeModelName = claudeHaikuModelName()
-    chatGPTModelName = modelName()
+    with graph_tab:
+        st.subheader("LangGraph Visualization")
+        try:
+            graph_bytes = graph.get_graph().draw_mermaid_png()
+            st.image(graph_bytes, caption="Chatbot Graph", use_column_width=True)
+        except Exception as e:
+            st.error(f"Failed to display graph: {e}")
 
-    if st.session_state.model_choice == "Anthropic Claude":
-        llm = ChatAnthropic(model=claudeModelName, api_key=st.session_state.api_key)
-    elif st.session_state.model_choice == "OpenAI ChatGPT":
-        # OpenAI ChatGPT를 사용하는 코드
-        llm = ChatOpenAI(model=chatGPTModelName, api_key=st.session_state.api_key)
+    with chat_tab:
+        st.subheader("Chat Interface")
 
-    # 검색 도구 생성 with Tavily API key
-    tool = TavilySearch(api_key=st.session_state.tavily_api_key, max_results=3)
-    tools = [tool]
+        # Initialize messages if not exists
+        if "messages_01" not in st.session_state:
+            st.session_state.messages_01 = []
 
-    # LLM에 tool binding
-    llm_with_tools = llm.bind_tools(tools)
+        # Display chat history with timestamps
+        for message in st.session_state.messages_01:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if "timestamp" in message:
+                    st.caption(f"Sent at {message['timestamp']}")
 
-    # Chatbot 함수 정의
-    def chatbot(state: State):
-        answer = llm_with_tools.invoke(state["messages"])
-        return {"messages": [answer]}
+        # Chat input
+        if prompt := st.chat_input("What would you like to know?"):
+            # Add timestamp to message
+            current_time = datetime.now().strftime("%H:%M:%S")
 
-    # Tool Node 정의
-    class BasicToolNode:
-        """Run tools requested in the last AIMessage node"""
+            # Add user message
+            st.session_state.messages_01.append(
+                {"role": "user", "content": prompt, "timestamp": current_time}
+            )
+            with st.chat_message("user"):
+                st.markdown(prompt)
+                st.caption(f"Sent at {current_time}")
 
-        def __init__(self, tools: list) -> None:
-            self.tools_list = {tool.name: tool for tool in tools}
+            # Prepare conversation history
+            full_conversation = [
+                (msg["role"], msg["content"]) for msg in st.session_state.messages_01
+            ]
 
-        def __call__(self, inputs: dict):
-            if messages := inputs.get("messages", []):
-                message = messages[-1]
-            else:
-                raise ValueError("No message found in input")
+            with debug_tab:
+                st.subheader("Execution Steps")
+                # Create columns for step organization
+                step_info, step_content = st.columns([1, 2])
 
-            outputs = []
-            for tool_call in message.tool_calls:
-                tool_result = self.tools_list[tool_call["name"]].invoke(
-                    tool_call["args"]
-                )
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps(tool_result, ensure_ascii=False),
-                        name=tool_call["name"],
-                        tool_call_id=tool_call["id"],
+                # Initialize step counter
+                if "step_counter" not in st.session_state:
+                    st.session_state.step_counter = 0
+
+                # Store responses for final chat display
+                responses = []
+
+                # Show processing indicator
+                with st.spinner("Processing your request..."):
+                    # Process conversation
+                    for event in graph.stream(
+                        {"messages": full_conversation}, stream_mode="values"
+                    ):
+                        for key, value in event.items():
+                            st.session_state.step_counter += 1
+
+                            # Step information column
+                            with step_info:
+                                st.markdown(f"### Step {st.session_state.step_counter}")
+                                st.markdown(f"**Type:** {key}")
+                                st.markdown(
+                                    f"**Time:** {datetime.now().strftime('%H:%M:%S')}"
+                                )
+
+                            # Step content column
+                            with step_content:
+                                # Display message content
+                                if (
+                                    isinstance(value, dict)
+                                    and "messages" in value
+                                    and value["messages"]
+                                ):
+                                    message = value["messages"][-1]
+
+                                    # Display content in a nice format
+                                    st.markdown("**Content:**")
+                                    st.code(message.content, language="markdown")
+
+                                    # Store assistant messages
+                                    if key == "chatbot":
+                                        responses.append(message.content)
+
+                                    # Display tool calls if any
+                                    if (
+                                        hasattr(message, "tool_calls")
+                                        and message.tool_calls
+                                    ):
+                                        st.markdown("**Tool Calls:**")
+                                        for tool_call in message.tool_calls:
+                                            with st.expander(
+                                                f"Tool: {tool_call['name']}",
+                                                expanded=False,
+                                            ):
+                                                st.code(
+                                                    tool_call["args"], language="json"
+                                                )
+                                else:
+                                    st.code(str(value), language="python")
+
+                                st.divider()
+
+                # Display final response in chat
+                if responses:
+                    current_time = datetime.now().strftime("%H:%M:%S")
+                    final_response = responses[-1]
+                    st.session_state.messages_01.append(
+                        {
+                            "role": "assistant",
+                            "content": final_response,
+                            "timestamp": current_time,
+                        }
                     )
-                )
-            return {"messages": outputs}
 
-    # 도구 노드 생성
-    tool_node = BasicToolNode(tools=[tool])
-
-    ###### STEP 3. 그래프 (Graph) 정의, 노드 추가 ######
-    # 그래프 생성
-    graph_builder = StateGraph(State)
-
-    # 그래프에 chatbot 노드 추가
-    graph_builder.add_node("chatbot", chatbot)
-    # 그래프에 tool_node 노드 추가
-    graph_builder.add_node("tools", tool_node)
-
-    ###### STEP 4. 그래프 Edge 추가 ######
-    graph_builder.add_edge(START, "chatbot")
-
-    # 그래프에 conditional edge 추가
-    def route_tools(
-        state: State,
-    ):
-        # 메시지가 존재할 경우 가장 최근 메시지 1개 추출
-        if messages := state.get("messages", []):
-            # 가장 최근 AI 메시지 추출
-            ai_message = messages[-1]
-        else:
-            # 입력 상태에 메시지가 없는 경우 예외 발생
-            raise ValueError(f"No messages found in input state to tool_edge: {state}")
-
-        # AI 메시지에 도구 호출이 있는 경우 "tools" 반환
-        if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-            # 도구 호출이 있는 경우 "tools" 반환
-            return "tools"
-        # 도구 호출이 없는 경우 "END" 반환
-        return END
-
-    # `tools_condition` 함수는 챗봇이 도구 사용을 요청하면 "tools"를 반환하고, 직접 응답이 가능한 경우 "END"를 반환
-    graph_builder.add_conditional_edges(
-        source="chatbot",
-        path=route_tools,
-        # route_tools 의 반환값이 "tools" 인 경우 "tools" 노드로, 그렇지 않으면 END 노드로 라우팅
-        path_map={"tools": "tools", END: END},
-    )
-
-    # tools > chatbot
-    graph_builder.add_edge("tools", "chatbot")
-
-    ###### STEP 5. 그래프 컴파일 ######
-    graph = graph_builder.compile()
-
-    ###### STEP 6. 그래프 시각화 ######
-    # 그래프 시각화
-    try:
-        # Get the mermaid PNG as bytes
-        graph_bytes = graph.get_graph().draw_mermaid_png()
-
-        # Convert the bytes to an image and display it in Streamlit
-        st.image(graph_bytes, caption="Chatbot Graph")
-
-    except Exception as e:
-        st.error(f"Failed to display graph: {e}")
-
-    if "messages_01" not in st.session_state:
-        st.session_state.messages_01 = []
-
-    ##### STEP 7. 이전 메시지 표시 #####
-    for message in st.session_state.messages_01:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    ##### STEP 8. 새로운 사용자 입력 처리 #####
-    if prompt := st.chat_input("What is up?"):
-        st.session_state.messages_01.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # 전체 대화 기록을 모델에 보내기 위해 준비
-        full_conversation = [
-            (msg["role"], msg["content"]) for msg in st.session_state.messages_01
-        ]
-
-        # Create an expander for showing the execution steps
-        with st.expander("Show Execution Steps", expanded=True):
-            # Create a container for step progress
-            step_container = st.empty()
-
-            # Store all responses for final chat display
-            responses = []
-
-            # 대화 기록을 모델에 보내기
-            for event in graph.stream(
-                {"messages": full_conversation}, stream_mode="values"
-            ):
-                for key, value in event.items():
-                    # Display step information
-                    with step_container.container():
-                        st.markdown(f"\n==============\nSTEP: {key}\n==============\n")
-
-                        # If it's a message object, display its content
-                        if (
-                            isinstance(value, dict)
-                            and "messages" in value
-                            and value["messages"]
-                        ):
-                            message = value["messages"][-1]
-                            st.markdown(f"```\n{message.content}\n```")
-
-                            # Store assistant messages for final chat display
-                            if key == "chatbot":
-                                responses.append(message.content)
-
-                            # If there are tool calls, display them
-                            if hasattr(message, "tool_calls") and message.tool_calls:
-                                st.markdown("**Tool Calls:**")
-                                for tool_call in message.tool_calls:
-                                    st.markdown(f"- Tool: `{tool_call['name']}`")
-                                    st.markdown(f"  Args: `{tool_call['args']}`")
-                        else:
-                            # Display raw value if not a message object
-                            st.markdown(f"```\n{value}\n```")
-
-            # Display the final chat message
-            if responses:  # Only display if we have responses
-                final_response = responses[-1]  # Get the last response
-                st.session_state.messages_01.append(
-                    {"role": "assistant", "content": final_response}
-                )
-                with st.chat_message("assistant"):
-                    st.markdown(final_response)
+                    with chat_tab:
+                        with st.chat_message("assistant"):
+                            st.markdown(final_response)
+                            st.caption(f"Sent at {current_time}")
 
 
 def collect_api_keys():

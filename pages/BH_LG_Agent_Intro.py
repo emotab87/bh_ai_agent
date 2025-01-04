@@ -96,10 +96,21 @@ def initialize_graph(llm) -> StateGraph:
                     "checkpoint_ns": state["checkpoint_ns"],
                 }
 
+        def tools_state_update(state: ChatState, value: dict):
+            """Update state with tool results while preserving checkpointer parameters."""
+            return {
+                "messages": value["messages"],
+                "thread_id": state["thread_id"],
+                "checkpoint_id": state["checkpoint_id"],
+                "checkpoint_ns": state["checkpoint_ns"],
+            }
+
         # Graph construction
         graph_builder = StateGraph(ChatState)
         graph_builder.add_node("chatbot", chatbot)
-        tool_node = ToolNode(tools=[tool])
+
+        # Configure tool node with state update
+        tool_node = ToolNode(tools=[tool], state_update=tools_state_update)
         graph_builder.add_node("tools", tool_node)
 
         # Edge configuration

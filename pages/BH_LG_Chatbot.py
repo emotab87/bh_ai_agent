@@ -1,7 +1,7 @@
 import streamlit as st
 from typing import Annotated
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END, CompiledStateGraph
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -56,10 +56,12 @@ def LangGraph_run():
     ###### STEP 6. 그래프 시각화 ######
     # 그래프 시각화
     try:
-        if visualize_graph_streamlit(graph):
-            st.success("Graph visualization completed successfully")
-        else:
-            st.warning("Failed to generate graph visualization")
+        # Get the mermaid PNG as bytes
+        graph_bytes = graph.get_graph().draw_mermaid_png()
+
+        # Convert the bytes to an image and display it in Streamlit
+        st.image(graph_bytes, caption="Chatbot Graph")
+
     except Exception as e:
         st.error(f"Failed to display graph: {e}")
 
@@ -94,22 +96,6 @@ def LangGraph_run():
                     st.markdown(response)
 
 
-def visualize_graph_streamlit(graph, xray=False):
-    """
-    CompiledStateGraph 객체를 시각화하여 이미지 데이터를 반환합니다.
-    """
-    try:
-        if isinstance(graph, CompiledStateGraph):
-            # Get the Mermaid diagram as a string
-            mermaid_str = graph.get_graph(xray=xray).to_mermaid()
-
-            # Create a Mermaid diagram using Streamlit's built-in support
-            st.mermaid(mermaid_str)
-            return True
-        return None
-    except Exception as e:
-        print(f"[ERROR] Visualize Graph Error: {e}")
-        return None
 
 
 def main():

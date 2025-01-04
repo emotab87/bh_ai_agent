@@ -173,7 +173,11 @@ def LangGraph_run():
                         st.divider()
 
                         # Display the message content
-                        if value["messages"]:
+                        if (
+                            isinstance(value, dict)
+                            and "messages" in value
+                            and value["messages"]
+                        ):
                             last_message = value["messages"][-1]
                             if hasattr(last_message, "content"):
                                 st.markdown(f"```\n{last_message.content}\n```")
@@ -185,14 +189,17 @@ def LangGraph_run():
                                 for tool_call in last_message.tool_calls:
                                     st.markdown(f"- Tool: `{tool_call['name']}`")
                                     st.markdown(f"  Args: `{tool_call['args']}`")
+                        else:
+                            st.markdown(f"```\n{value}\n```")
 
                 # Display the final response in the chat interface
-                response = value["messages"][-1].content
-                st.session_state.messages_01.append(
-                    {"role": "assistant", "content": response}
-                )
-                with st.chat_message("assistant"):
-                    st.markdown(response)
+                if isinstance(value, dict) and "messages" in value:
+                    response = value["messages"][-1].content
+                    st.session_state.messages_01.append(
+                        {"role": "assistant", "content": response}
+                    )
+                    with st.chat_message("assistant"):
+                        st.markdown(response)
 
 
 def collect_api_keys():

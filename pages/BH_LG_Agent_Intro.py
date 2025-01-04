@@ -164,26 +164,23 @@ def LangGraph_run():
                 (msg["role"], msg["content"]) for msg in st.session_state.messages_01
             ]
 
-            with debug_tab:
-                st.subheader("Execution Steps")
-                # Create columns for step organization
-                step_info, step_content = st.columns([1, 2])
+            # Store responses for final chat display
+            responses = []
 
-                # Initialize step counter
-                if "step_counter" not in st.session_state:
-                    st.session_state.step_counter = 0
+            # Show processing indicator
+            with st.spinner("Processing your request..."):
+                # Process conversation
+                for event in graph.stream(
+                    {"messages": full_conversation}, stream_mode="values"
+                ):
+                    for key, value in event.items():
+                        # Update step counter
+                        st.session_state.step_counter += 1
 
-                # Store responses for final chat display
-                responses = []
-
-                # Show processing indicator
-                with st.spinner("Processing your request..."):
-                    # Process conversation
-                    for event in graph.stream(
-                        {"messages": full_conversation}, stream_mode="values"
-                    ):
-                        for key, value in event.items():
-                            st.session_state.step_counter += 1
+                        # Display debug information in debug tab
+                        with debug_tab:
+                            # Create columns for step organization
+                            step_info, step_content = st.columns([1, 2])
 
                             # Step information column
                             with step_info:
@@ -230,10 +227,12 @@ def LangGraph_run():
 
                                 st.divider()
 
-                # Display final response in chat
+                # After processing, update chat with final response
                 if responses:
                     current_time = datetime.now().strftime("%H:%M:%S")
                     final_response = responses[-1]
+
+                    # Add response to session state
                     st.session_state.messages_01.append(
                         {
                             "role": "assistant",
@@ -242,10 +241,9 @@ def LangGraph_run():
                         }
                     )
 
-                    with chat_tab:
-                        with st.chat_message("assistant"):
-                            st.markdown(final_response)
-                            st.caption(f"Sent at {current_time}")
+                    # Switch back to chat tab to show response
+                    chat_tab.chat_message("assistant").markdown(final_response)
+                    chat_tab.caption(f"Sent at {current_time}")
 
 
 def collect_api_keys():

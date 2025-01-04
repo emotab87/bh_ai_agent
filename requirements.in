@@ -12,4 +12,3 @@ langchain_teddynote
 langchain_anthropic
 ipython
 dataclasses
-functools

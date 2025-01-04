@@ -29,10 +29,10 @@ class ModelConfig:
 
 model_config = ModelConfig()
 
-# Memory storage initialization
+# Memory storage initialization - no arguments needed
 memory = MemorySaver()
 
-# Configure runnable settings
+# Configure runnable settings with configurable parameters
 config = RunnableConfig(
     recursion_limit=10,
     configurable={

@@ -57,6 +57,8 @@ colorama==0.4.6
     #   click
     #   ipython
     #   tqdm
+dataclasses==0.6
+    # via -r requirements.in
 dataclasses-json==0.6.7
     # via langchain-community
 decorator==5.1.1
@@ -79,6 +81,8 @@ frozenlist==1.5.0
     # via
     #   aiohttp
     #   aiosignal
+functools==0.5
+    # via -r requirements.in
 gitdb==4.0.12
     # via gitpython
 gitpython==3.1.44

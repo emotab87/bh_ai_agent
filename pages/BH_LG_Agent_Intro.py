@@ -157,10 +157,36 @@ def LangGraph_run():
             (msg["role"], msg["content"]) for msg in st.session_state.messages_01
         ]
 
-        # 대화 기록을 모델에 보내기
-        for event in graph.stream({"messages": full_conversation}):
-            for value in event.values():
-                # AIMessage 객체에서 직접 내용에 접근
+        # Create an expander for showing the execution steps
+        with st.expander("Show Execution Steps", expanded=True):
+            # Create a container for step progress
+            step_container = st.empty()
+
+            # 대화 기록을 모델에 보내기
+            for event in graph.stream(
+                {"messages": full_conversation}, stream_mode="values"
+            ):
+                for key, value in event.items():
+                    # Display step information in a nice format
+                    with step_container.container():
+                        st.markdown(f"**Current Step: {key}**")
+                        st.divider()
+
+                        # Display the message content
+                        if value["messages"]:
+                            last_message = value["messages"][-1]
+                            if hasattr(last_message, "content"):
+                                st.markdown(f"```\n{last_message.content}\n```")
+                            if (
+                                hasattr(last_message, "tool_calls")
+                                and last_message.tool_calls
+                            ):
+                                st.markdown("**Tool Calls:**")
+                                for tool_call in last_message.tool_calls:
+                                    st.markdown(f"- Tool: `{tool_call['name']}`")
+                                    st.markdown(f"  Args: `{tool_call['args']}`")
+
+                # Display the final response in the chat interface
                 response = value["messages"][-1].content
                 st.session_state.messages_01.append(
                     {"role": "assistant", "content": response}

@@ -21,6 +21,16 @@ def modelName():
 
 
 def LangGraph_run():
+    # First, validate the Tavily API key
+    try:
+        # 검색 도구 생성 with Tavily API key
+        tool = TavilySearch(api_key=st.session_state.tavily_api_key, max_results=3)
+        # Test the API key with a simple search
+        tool.invoke("test")
+    except Exception as e:
+        st.error("Invalid Tavily API key. Please check your API key and try again.")
+        st.error(f"Error: {str(e)}")
+        return
 
     ###### STEP 1. 상태 (State) 정의 ######
     class State(TypedDict):
@@ -212,15 +222,41 @@ def collect_api_keys():
 
         with col1:
             if st.session_state.model_choice == "Anthropic Claude":
-                llm_api_key = st.text_input("Anthropic API Key:", type="password")
+                llm_api_key = st.text_input(
+                    "Anthropic API Key:", type="password", key="llm_key"
+                )
             else:
-                llm_api_key = st.text_input("OpenAI API Key:", type="password")
+                llm_api_key = st.text_input(
+                    "OpenAI API Key:", type="password", key="llm_key"
+                )
 
         with col2:
-            tavily_api_key = st.text_input("Tavily Search API Key:", type="password")
+            tavily_api_key = st.text_input(
+                "Tavily Search API Key:",
+                type="password",
+                key="tavily_key",
+                help="Get your Tavily API key from https://tavily.com",
+            )
+
+        # Add help text for API keys
+        st.markdown(
+            """
+        > **Note**: 
+        > - For OpenAI key, visit: https://platform.openai.com/api-keys
+        > - For Anthropic key, visit: https://console.anthropic.com/
+        > - For Tavily key, visit: https://tavily.com
+        """
+        )
 
         if st.button("Submit API Keys"):
             if llm_api_key and tavily_api_key:
+                # Basic validation of API key formats
+                if len(tavily_api_key) < 20:  # Tavily keys are typically longer
+                    st.warning(
+                        "The Tavily API key seems too short. Please check if it's correct."
+                    )
+                    return False
+
                 st.session_state.api_key = llm_api_key
                 st.session_state.tavily_api_key = tavily_api_key
                 st.session_state.api_key_submitted = True

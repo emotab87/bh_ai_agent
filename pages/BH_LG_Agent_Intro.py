@@ -12,6 +12,7 @@ from langchain.schema import AIMessage, HumanMessage
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
+from langchain_core.runnables import RunnableConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,22 +27,25 @@ class ModelConfig:
     MAX_SEARCH_RESULTS: int = 3
 
 
-config = ModelConfig()
+model_config = ModelConfig()
+
+# Configure runnable settings
+runnable_config = RunnableConfig(
+    recursion_limit=10,  # Maximum 10 node visits
+    configurable={
+        "thread_id": "default_thread",
+        "checkpoint_id": "default_checkpoint",
+        "checkpoint_ns": "default_namespace",
+    },
+)
 
 # Memory storage initialization
-memory = MemorySaver(
-    thread_id="default_thread",
-    checkpoint_id="default_checkpoint",
-    checkpoint_ns="default_namespace",
-)
+memory = MemorySaver()
 
 
 # State definition with improved type hints
 class ChatState(TypedDict):
     messages: Annotated[List[Tuple[str, str]], add_messages]
-    thread_id: str
-    checkpoint_id: str
-    checkpoint_ns: str
 
 
 @lru_cache()
@@ -51,9 +55,9 @@ def get_llm(model_choice: str, api_key: str) -> ChatAnthropic | ChatOpenAI:
     """
     try:
         if model_choice == "Anthropic Claude":
-            return ChatAnthropic(model=config.CLAUDE_MODEL, api_key=api_key)
+            return ChatAnthropic(model=model_config.CLAUDE_MODEL, api_key=api_key)
         elif model_choice == "OpenAI ChatGPT":
-            return ChatOpenAI(model=config.GPT_MODEL, api_key=api_key)
+            return ChatOpenAI(model=model_config.GPT_MODEL, api_key=api_key)
         else:
             raise ValueError(f"Unsupported model choice: {model_choice}")
     except Exception as e:
@@ -67,7 +71,7 @@ def initialize_graph(llm) -> StateGraph:
     """
     try:
         # Tool initialization
-        tool = TavilySearch(max_results=config.MAX_SEARCH_RESULTS)
+        tool = TavilySearch(max_results=model_config.MAX_SEARCH_RESULTS)
         tools = [tool]
 
         # Bind tools to LLM
@@ -76,13 +80,10 @@ def initialize_graph(llm) -> StateGraph:
         # Chatbot function with error handling
         def chatbot(state: ChatState):
             try:
-                response = llm_with_tools.invoke(state["messages"])
-                return {
-                    "messages": [response],
-                    "thread_id": state["thread_id"],
-                    "checkpoint_id": state["checkpoint_id"],
-                    "checkpoint_ns": state["checkpoint_ns"],
-                }
+                response = llm_with_tools.invoke(
+                    state["messages"], config=runnable_config
+                )
+                return {"messages": [response]}
             except Exception as e:
                 logger.error(f"Error in chatbot: {str(e)}")
                 return {
@@ -90,27 +91,15 @@ def initialize_graph(llm) -> StateGraph:
                         AIMessage(
                             content="I encountered an error processing your request. Please try again."
                         )
-                    ],
-                    "thread_id": state["thread_id"],
-                    "checkpoint_id": state["checkpoint_id"],
-                    "checkpoint_ns": state["checkpoint_ns"],
+                    ]
                 }
-
-        def tools_state_update(state: ChatState, value: dict):
-            """Update state with tool results while preserving checkpointer parameters."""
-            return {
-                "messages": value["messages"],
-                "thread_id": state["thread_id"],
-                "checkpoint_id": state["checkpoint_id"],
-                "checkpoint_ns": state["checkpoint_ns"],
-            }
 
         # Graph construction
         graph_builder = StateGraph(ChatState)
         graph_builder.add_node("chatbot", chatbot)
 
-        # Configure tool node with state update
-        tool_node = ToolNode(tools=[tool], state_update=tools_state_update)
+        # Configure tool node
+        tool_node = ToolNode(tools=[tool])
         graph_builder.add_node("tools", tool_node)
 
         # Edge configuration
@@ -125,15 +114,6 @@ def initialize_graph(llm) -> StateGraph:
         raise
 
 
-def display_chat_history(messages: List[dict]):
-    """
-    Display chat history with proper formatting.
-    """
-    for message in messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-
 def handle_user_input(graph, messages: List[dict], prompt: str):
     """
     Handle user input and generate response.
@@ -145,15 +125,9 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
 
         full_conversation = [(msg["role"], msg["content"]) for msg in messages]
 
-        # Initialize state with required checkpointer parameters
-        initial_state = {
-            "messages": full_conversation,
-            "thread_id": "default_thread",
-            "checkpoint_id": "default_checkpoint",
-            "checkpoint_ns": "default_namespace",
-        }
-
-        for event in graph.stream(initial_state):
+        for event in graph.stream(
+            {"messages": full_conversation}, config=runnable_config
+        ):
             for value in event.values():
                 response = value["messages"][-1].content
                 messages.append({"role": "assistant", "content": response})
@@ -162,6 +136,15 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
     except Exception as e:
         logger.error(f"Error processing user input: {str(e)}")
         st.error("An error occurred while processing your request. Please try again.")
+
+
+def display_chat_history(messages: List[dict]):
+    """
+    Display chat history with proper formatting.
+    """
+    for message in messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
 
 def render_graph_visualization(graph):

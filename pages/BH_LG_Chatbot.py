@@ -1,12 +1,12 @@
 import streamlit as st
 from typing import Annotated
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, START, END, CompiledStateGraph
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
-from langgraph.prebuilt.state_graph import CompiledStateGraph
-from langgraph.graph.nodes import NodeStyles
+import base64
+import io
 
 
 def claudeHaikuModelName():
@@ -56,9 +56,8 @@ def LangGraph_run():
     ###### STEP 6. 그래프 시각화 ######
     # 그래프 시각화
     try:
-        image_data = visualize_graph_streamlit(graph)
-        if image_data is not None:
-            st.image(image_data, caption="Chatbot Graph", use_column_width=True)
+        if visualize_graph_streamlit(graph):
+            st.success("Graph visualization completed successfully")
         else:
             st.warning("Failed to generate graph visualization")
     except Exception as e:
@@ -101,11 +100,12 @@ def visualize_graph_streamlit(graph, xray=False):
     """
     try:
         if isinstance(graph, CompiledStateGraph):
-            image_data = graph.get_graph(xray=xray).draw_mermaid_png(
-                background_color="white",
-                node_colors=NodeStyles(),
-            )
-            return image_data
+            # Get the Mermaid diagram as a string
+            mermaid_str = graph.get_graph(xray=xray).to_mermaid()
+
+            # Create a Mermaid diagram using Streamlit's built-in support
+            st.mermaid(mermaid_str)
+            return True
         return None
     except Exception as e:
         print(f"[ERROR] Visualize Graph Error: {e}")

@@ -11,3 +11,5 @@ faiss-cpu
 langchain_teddynote
 langchain_anthropic
 ipython
+langgraph.prebuilt.state_graph
+langgraph.graph.nodes

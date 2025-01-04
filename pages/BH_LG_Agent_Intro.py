@@ -33,9 +33,7 @@ model_config = ModelConfig()
 runnable_config = RunnableConfig(
     recursion_limit=10,  # Maximum 10 node visits
     configurable={
-        "thread_id": "default_thread",
-        "checkpoint_id": "default_checkpoint",
-        "checkpoint_ns": "default_namespace",
+        "thread_id": "1"
     },
 )
 

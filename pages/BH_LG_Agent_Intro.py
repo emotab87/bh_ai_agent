@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 from typing import Annotated, List, Tuple, Optional
 from typing_extensions import TypedDict
@@ -168,21 +166,29 @@ def main():
         st.session_state.api_key_submitted = False
 
     if not st.session_state.api_key_submitted:
-        api_key = st.text_input(
+        llm_api_key = st.text_input(
             f"Please input your {model_choice} API Key:", type="password"
+        )
+        tavily_api_key = st.text_input(
+            "Please input your Tavily API Key:", type="password"
         )
 
         if st.button("Submit"):
-            if api_key:
-                st.session_state.api_key = api_key
+            if llm_api_key and tavily_api_key:
+                st.session_state.api_key = llm_api_key
+                st.session_state.tavily_api_key = tavily_api_key
                 st.session_state.api_key_submitted = True
             else:
-                st.warning(f"Please input your {model_choice} API Key.")
+                st.warning("Please input both API keys.")
 
     # Initialize chat session
     if st.session_state.get("api_key_submitted"):
         try:
             llm = get_llm(st.session_state.model_choice, st.session_state.api_key)
+            # Set Tavily API key for the tool
+            import os
+
+            os.environ["TAVILY_API_KEY"] = st.session_state.tavily_api_key
             graph = initialize_graph(llm)
 
             if "messages_01" not in st.session_state:

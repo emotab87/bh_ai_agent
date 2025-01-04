@@ -172,44 +172,49 @@ def LangGraph_run():
             # Create a container for step progress
             step_container = st.empty()
 
+            # Store all responses for final chat display
+            responses = []
+
             # 대화 기록을 모델에 보내기
             for event in graph.stream(
                 {"messages": full_conversation}, stream_mode="values"
             ):
                 for key, value in event.items():
-                    # Display step information in a nice format
+                    # Display step information
                     with step_container.container():
-                        st.markdown(f"**Current Step: {key}**")
-                        st.divider()
+                        st.markdown(f"\n==============\nSTEP: {key}\n==============\n")
 
-                        # Display the message content
+                        # If it's a message object, display its content
                         if (
                             isinstance(value, dict)
                             and "messages" in value
                             and value["messages"]
                         ):
-                            last_message = value["messages"][-1]
-                            if hasattr(last_message, "content"):
-                                st.markdown(f"```\n{last_message.content}\n```")
-                            if (
-                                hasattr(last_message, "tool_calls")
-                                and last_message.tool_calls
-                            ):
+                            message = value["messages"][-1]
+                            st.markdown(f"```\n{message.content}\n```")
+
+                            # Store assistant messages for final chat display
+                            if key == "chatbot":
+                                responses.append(message.content)
+
+                            # If there are tool calls, display them
+                            if hasattr(message, "tool_calls") and message.tool_calls:
                                 st.markdown("**Tool Calls:**")
-                                for tool_call in last_message.tool_calls:
+                                for tool_call in message.tool_calls:
                                     st.markdown(f"- Tool: `{tool_call['name']}`")
                                     st.markdown(f"  Args: `{tool_call['args']}`")
                         else:
+                            # Display raw value if not a message object
                             st.markdown(f"```\n{value}\n```")
 
-                # Display the final response in the chat interface
-                if isinstance(value, dict) and "messages" in value:
-                    response = value["messages"][-1].content
-                    st.session_state.messages_01.append(
-                        {"role": "assistant", "content": response}
-                    )
-                    with st.chat_message("assistant"):
-                        st.markdown(response)
+            # Display the final chat message
+            if responses:  # Only display if we have responses
+                final_response = responses[-1]  # Get the last response
+                st.session_state.messages_01.append(
+                    {"role": "assistant", "content": final_response}
+                )
+                with st.chat_message("assistant"):
+                    st.markdown(final_response)
 
 
 def collect_api_keys():

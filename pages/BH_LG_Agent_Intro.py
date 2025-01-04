@@ -29,16 +29,18 @@ class ModelConfig:
 
 model_config = ModelConfig()
 
-# Configure runnable settings
-runnable_config = RunnableConfig(
-    recursion_limit=10,  # Maximum 10 node visits
-    configurable={
-        "thread_id": "1"
-    },
-)
-
 # Memory storage initialization
 memory = MemorySaver()
+
+# Configure runnable settings
+config = RunnableConfig(
+    recursion_limit=10,
+    configurable={
+        "thread_id": "1",
+        "checkpoint_ns": "default_ns",
+        "checkpoint_id": "default_id",
+    },
+)
 
 
 # State definition with improved type hints
@@ -78,9 +80,7 @@ def initialize_graph(llm) -> StateGraph:
         # Chatbot function with error handling
         def chatbot(state: ChatState):
             try:
-                response = llm_with_tools.invoke(
-                    state["messages"], config=runnable_config
-                )
+                response = llm_with_tools.invoke(state["messages"], config=config)
                 return {"messages": [response]}
             except Exception as e:
                 logger.error(f"Error in chatbot: {str(e)}")
@@ -123,9 +123,7 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
 
         full_conversation = [(msg["role"], msg["content"]) for msg in messages]
 
-        for event in graph.stream(
-            {"messages": full_conversation}, config=runnable_config
-        ):
+        for event in graph.stream({"messages": full_conversation}, config=config):
             for value in event.values():
                 response = value["messages"][-1].content
                 messages.append({"role": "assistant", "content": response})

@@ -29,12 +29,19 @@ class ModelConfig:
 config = ModelConfig()
 
 # Memory storage initialization
-memory = MemorySaver()
+memory = MemorySaver(
+    thread_id="default_thread",
+    checkpoint_id="default_checkpoint",
+    checkpoint_ns="default_namespace",
+)
 
 
 # State definition with improved type hints
 class ChatState(TypedDict):
     messages: Annotated[List[Tuple[str, str]], add_messages]
+    thread_id: str
+    checkpoint_id: str
+    checkpoint_ns: str
 
 
 @lru_cache()
@@ -70,7 +77,12 @@ def initialize_graph(llm) -> StateGraph:
         def chatbot(state: ChatState):
             try:
                 response = llm_with_tools.invoke(state["messages"])
-                return {"messages": [response]}
+                return {
+                    "messages": [response],
+                    "thread_id": state["thread_id"],
+                    "checkpoint_id": state["checkpoint_id"],
+                    "checkpoint_ns": state["checkpoint_ns"],
+                }
             except Exception as e:
                 logger.error(f"Error in chatbot: {str(e)}")
                 return {
@@ -78,7 +90,10 @@ def initialize_graph(llm) -> StateGraph:
                         AIMessage(
                             content="I encountered an error processing your request. Please try again."
                         )
-                    ]
+                    ],
+                    "thread_id": state["thread_id"],
+                    "checkpoint_id": state["checkpoint_id"],
+                    "checkpoint_ns": state["checkpoint_ns"],
                 }
 
         # Graph construction
@@ -119,7 +134,15 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
 
         full_conversation = [(msg["role"], msg["content"]) for msg in messages]
 
-        for event in graph.stream({"messages": full_conversation}):
+        # Initialize state with required checkpointer parameters
+        initial_state = {
+            "messages": full_conversation,
+            "thread_id": "default_thread",
+            "checkpoint_id": "default_checkpoint",
+            "checkpoint_ns": "default_namespace",
+        }
+
+        for event in graph.stream(initial_state):
             for value in event.values():
                 response = value["messages"][-1].content
                 messages.append({"role": "assistant", "content": response})

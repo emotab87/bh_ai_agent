@@ -31,6 +31,96 @@ def LangGraph_run():
         st.error(f"Error: {str(e)}")
         return
 
+    ###### STEP 1. State Definition ######
+    class State(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    ###### STEP 2. Node Definition ######
+    # Initialize LLM
+    claudeModelName = claudeHaikuModelName()
+    chatGPTModelName = modelName()
+
+    if st.session_state.model_choice == "Anthropic Claude":
+        llm = ChatAnthropic(model=claudeModelName, api_key=st.session_state.api_key)
+    elif st.session_state.model_choice == "OpenAI ChatGPT":
+        llm = ChatOpenAI(model=chatGPTModelName, api_key=st.session_state.api_key)
+
+    # Initialize tools
+    tools = [tool]  # Use the already validated Tavily tool
+
+    # Bind tools to LLM
+    llm_with_tools = llm.bind_tools(tools)
+
+    # Define chatbot node
+    def chatbot(state: State):
+        answer = llm_with_tools.invoke(state["messages"])
+        return {"messages": [answer]}
+
+    # Define tool node
+    class BasicToolNode:
+        """Run tools requested in the last AIMessage node"""
+
+        def __init__(self, tools: list) -> None:
+            self.tools_list = {tool.name: tool for tool in tools}
+
+        def __call__(self, inputs: dict):
+            if messages := inputs.get("messages", []):
+                message = messages[-1]
+            else:
+                raise ValueError("No message found in input")
+
+            outputs = []
+            for tool_call in message.tool_calls:
+                tool_result = self.tools_list[tool_call["name"]].invoke(
+                    tool_call["args"]
+                )
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps(tool_result, ensure_ascii=False),
+                        name=tool_call["name"],
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+            return {"messages": outputs}
+
+    # Create tool node
+    tool_node = BasicToolNode(tools=tools)
+
+    ###### STEP 3. Graph Definition ######
+    # Create graph
+    graph_builder = StateGraph(State)
+
+    # Add nodes
+    graph_builder.add_node("chatbot", chatbot)
+    graph_builder.add_node("tools", tool_node)
+
+    # Add edges
+    graph_builder.add_edge(START, "chatbot")
+
+    # Define routing logic
+    def route_tools(state: State):
+        if messages := state.get("messages", []):
+            ai_message = messages[-1]
+        else:
+            raise ValueError("No messages found in input state")
+
+        if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+            return "tools"
+        return END
+
+    # Add conditional edges
+    graph_builder.add_conditional_edges(
+        source="chatbot",
+        path=route_tools,
+        path_map={"tools": "tools", END: END},
+    )
+
+    # Add tool to chatbot edge
+    graph_builder.add_edge("tools", "chatbot")
+
+    # Compile graph
+    graph = graph_builder.compile()
+
     # Create tabs for different views
     chat_tab, graph_tab, debug_tab = st.tabs(["💬 Chat", "📊 Graph", "🔍 Debug"])
 

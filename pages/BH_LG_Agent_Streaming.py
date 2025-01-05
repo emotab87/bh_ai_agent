@@ -147,7 +147,7 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
             # Get the node name from the event key
             for node_name, value in event.items():
                 # response = value["messages"][-1].content
-                response = value["messages"][-1].pretty_print()
+                response = value["messages"][-1]
                 messages.append({"role": node_name, "content": response})
                 with st.chat_message(node_name):
                     st.markdown(response)

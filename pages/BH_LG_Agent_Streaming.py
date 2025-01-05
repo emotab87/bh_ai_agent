@@ -49,9 +49,20 @@ class ChatState(TypedDict):
 def search_keyword(query: str) -> List[Dict[str, str]]:
     """
     Search for a keyword in the Google News.
+
+    Args:
+        query: The search query string.
+
+    Returns:
+        List[Dict[str, str]]: A list of news articles, each containing title and url.
     """
-    news_tool = GoogleNews()
-    return news_tool.search_by_keyword(query, k=5)
+    try:
+        news_tool = GoogleNews()
+        results = news_tool.search_by_keyword(query, k=5)
+        return results
+    except Exception as e:
+        logger.error(f"Error in search_keyword: {str(e)}")
+        return [{"error": f"Failed to search news: {str(e)}"}]
 
 
 @lru_cache()
@@ -88,7 +99,7 @@ def initialize_graph(llm) -> StateGraph:
                 response = llm_with_tools.invoke(state["messages"], config=config)
                 return {
                     "messages": [response],
-                    "dummy_data": "[chatbot] 호출, dummy data",  # for the testing, added dummy_data
+                    "dummy_data": "[chatbot] 호출, dummy data",  # for testing, added dummy_data
                 }
             except Exception as e:
                 logger.error(f"Error in chatbot: {str(e)}")
@@ -104,8 +115,8 @@ def initialize_graph(llm) -> StateGraph:
         graph_builder = StateGraph(ChatState)
         graph_builder.add_node("chatbot", chatbot)
 
-        # Configure tool node
-        tool_node = ToolNode(tools=[tool])
+        # Configure tool node with the search_keyword tool
+        tool_node = ToolNode(tools=tools)  # Pass the tools list directly
         graph_builder.add_node("tools", tool_node)
 
         # Edge configuration

@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,7 @@ class ChatState(TypedDict):
     dummy_data: Annotated[str, "dummy_data"]
 
 
-@tools
+@tool
 def search_keyword(query: str) -> List[Dict[str, str]]:
     """
     Search for a keyword in the Google News.

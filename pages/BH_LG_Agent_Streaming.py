@@ -96,10 +96,26 @@ def initialize_graph(llm) -> StateGraph:
         # Chatbot function with error handling
         def chatbot(state: ChatState):
             try:
+                # Log the input state for debugging
+                logger.info(f"Chatbot received state: {state}")
+
+                # Get the last message from the conversation
+                last_message = state["messages"][-1] if state["messages"] else None
+                logger.info(f"Last message: {last_message}")
+
+                # Invoke LLM with the full conversation history
                 response = llm_with_tools.invoke(state["messages"], config=config)
+                logger.info(f"LLM response: {response}")
+
+                # Ensure response is in the correct format
+                if hasattr(response, "content"):
+                    message_content = response.content
+                else:
+                    message_content = str(response)
+
                 return {
-                    "messages": [response],
-                    "dummy_data": "[chatbot] 호출, dummy data",  # for testing, added dummy_data
+                    "messages": [AIMessage(content=message_content)],
+                    "dummy_data": "[chatbot] called",
                 }
             except Exception as e:
                 logger.error(f"Error in chatbot: {str(e)}")
@@ -108,7 +124,8 @@ def initialize_graph(llm) -> StateGraph:
                         AIMessage(
                             content="I encountered an error processing your request. Please try again."
                         )
-                    ]
+                    ],
+                    "dummy_data": "[chatbot] error",
                 }
 
         # Graph construction
@@ -142,14 +159,30 @@ def handle_user_input(graph, messages: List[dict], prompt: str):
             st.markdown(prompt)
 
         full_conversation = [(msg["role"], msg["content"]) for msg in messages]
+        logger.info(f"Starting conversation with: {full_conversation}")
 
         for event in graph.stream(input=input, stream_mode="updates", config=config):
+            logger.info(f"Received event: {event}")
             # Get the node name from the event key
             for node_name, value in event.items():
-                response = value["messages"][-1].content
-                messages.append({"role": node_name, "content": response})
-                with st.chat_message(node_name):
-                    st.markdown(response)
+                logger.info(f"Processing node {node_name} with value: {value}")
+                if "messages" in value and value["messages"]:
+                    response = value["messages"][-1]
+                    # Handle both string and AIMessage responses
+                    response_content = (
+                        response.content
+                        if hasattr(response, "content")
+                        else str(response)
+                    )
+                    logger.info(f"Response from {node_name}: {response_content}")
+
+                    messages.append({"role": node_name, "content": response_content})
+                    with st.chat_message(node_name):
+                        st.markdown(response_content)
+                else:
+                    logger.warning(
+                        f"No messages found in value from {node_name}: {value}"
+                    )
     except Exception as e:
         logger.error(f"Error processing user input: {str(e)}")
         st.error("An error occurred while processing your request. Please try again.")
